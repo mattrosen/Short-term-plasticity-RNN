@@ -24,12 +24,13 @@ par = {
     'num_motion_tuned'      : 24,
     'num_fix_tuned'         : 0,
     'num_rule_tuned'        : 0,
-    'n_hidden'              : 100,
+    'n_hidden'              : 60,
     'n_output'              : 3,
+    'n_networks'            : 10,
 
     # Timings and rates
-    'dt'                    : 10,
-    'learning_rate'         : 2e-2,
+    'dt'                    : 20,
+    'learning_rate'         : 1e-2,
     'membrane_time_constant': 100,
 
     # Input and noise
@@ -55,7 +56,7 @@ par = {
     'U_std'                 : 0.45,
 
     # Training specs
-    'batch_size'            : 1024,
+    'batch_size'            : 512,
     'num_iterations'        : 2000,
     'iters_between_outputs' : 100,
 
@@ -68,7 +69,7 @@ par = {
     'delay_time'            : 1000,
     'test_time'             : 500,
     'variable_delay_max'    : 300,
-    'mask_duration'         : 50,  # duration of traing mask after test onset
+    'mask_duration'         : 40,  # duration of traing mask after test onset
     'catch_trial_pct'       : 0.0,
     'num_receptive_fields'  : 1,
     'num_rules'             : 1, # this will be two for the DMS+DMRS task
@@ -228,7 +229,10 @@ def update_dependencies():
 
     par['ind_inh'] = np.where(par['EI_list']==-1)[0]
 
-    par['EI_matrix'] = np.diag(par['EI_list'])
+    ## OLD:
+    #par['EI_matrix'] = np.diag(par['EI_list'])
+    ## NEW:
+    par['EI_matrix'] = np.tile(np.diag(par['EI_list'])[np.newaxis, :, :], (par['n_networks'], 1, 1))
 
     # Membrane time constant of RNN neurons
     par['alpha_neuron'] = np.float32(par['dt'])/par['membrane_time_constant']
@@ -238,29 +242,49 @@ def update_dependencies():
     par['noise_in'] = np.sqrt(2/par['alpha_neuron'])*par['noise_in_sd'] # since term will be multiplied by par['alpha_neuron']
 
     # initial neural activity
-    par['h0'] = 0.1*np.ones((1, par['n_hidden']), dtype=np.float32)
+    ## OLD:
+    # par['h0'] = 0.1*np.ones((1, par['n_hidden']), dtype=np.float32)
+    ## NEW:
+    par['h0'] = 0.1*np.ones((par['n_networks'], 1, par['n_hidden']), dtype=np.float32)
     #par['h0'] = 0.1*np.ones((par['batch_size'], par['n_hidden']), dtype=np.float32)
 
     # initial input weights
-    par['w_in0'] = initialize([par['n_input'], par['n_hidden']], par['connection_prob']/par['num_receptive_fields'], shape=0.2, scale=1.)
+    ## OLD:
+    #par['w_in0'] = initialize([par['n_input'], par['n_hidden']], par['connection_prob']/par['num_receptive_fields'], shape=0.2, scale=1.)
+    ## NEW:
+    par['w_in0'] = initialize([par['n_networks'], par['n_input'], par['n_hidden']], par['connection_prob']/par['num_receptive_fields'], shape=0.2, scale=1.)
 
     # Initialize starting recurrent weights
     # If excitatory/inhibitory neurons desired, initializes with random matrix with
     #   zeroes on the diagonal
     # If not, initializes with a diagonal matrix
     if par['EI']:
-        par['w_rnn0'] = initialize([par['n_hidden'], par['n_hidden']], par['connection_prob'])
+        ## OLD:
+        #par['w_rnn0'] = initialize([par['n_hidden'], par['n_hidden']], par['connection_prob'])
+        ## NEW:
+        par['w_rnn0'] = initialize([par['n_networks'], par['n_hidden'], par['n_hidden']], par['connection_prob'])
         if par['balance_EI']:
             # increase the weights to and from inh units to balce excitation and inhibition
-            par['w_rnn0'][:, par['ind_inh']] = initialize([par['n_hidden'], par['num_inh_units']], par['connection_prob'], shape=0.2, scale=1.)
-            par['w_rnn0'][par['ind_inh'], :] = initialize([par['num_inh_units'], par['n_hidden']], par['connection_prob'], shape=0.2, scale=1.)
+            ## OLD:
+            #par['w_rnn0'][:, par['ind_inh']] = initialize([par['n_hidden'], par['num_inh_units']], par['connection_prob'], shape=0.2, scale=1.)
+            #par['w_rnn0'][par['ind_inh'], :] = initialize([par['num_inh_units'], par['n_hidden']], par['connection_prob'], shape=0.2, scale=1.)
+            ## NEW:
+            par['w_rnn0'][:, :, par['ind_inh']] = initialize([par['n_networks'], par['n_hidden'], par['num_inh_units']], par['connection_prob'], shape=0.2, scale=1.)
+            par['w_rnn0'][:, par['ind_inh'], :] = initialize([par['n_networks'], par['num_inh_units'], par['n_hidden']], par['connection_prob'], shape=0.2, scale=1.)
 
     else:
+        ## OLD:
+        #par['w_rnn0'] = 0.54*np.eye(par['n_hidden'])
+        ## NEW:
         par['w_rnn0'] = 0.54*np.eye(par['n_hidden'])
+        par['w_rnn0'] = np.tile(par['w_rnn0'][np.newaxis,:,:], (par['n_networks'], 1, 1))
 
 
     # initial recurrent biases
-    par['b_rnn0'] = np.zeros((1, par['n_hidden']), dtype=np.float32)
+    ## OLD:
+    #par['b_rnn0'] = np.zeros((1, par['n_hidden']), dtype=np.float32)
+    ## NEW:
+    par['b_rnn0'] = np.zeros((par['n_networks'], 1, par['n_hidden']), dtype=np.float32)
 
     # Effective synaptic weights are stronger when no short-term synaptic plasticity
     # is used, so the strength of the recurrent weights is reduced to compensate
@@ -268,16 +292,24 @@ def update_dependencies():
         par['w_rnn0'] = par['w_rnn0']/3.
 
     # initial output weights and biases
-    par['w_out0'] = initialize([par['n_hidden'], par['n_output']], par['connection_prob'])
-    par['b_out0'] = np.zeros((1, par['n_output']), dtype=np.float32)
+    ## OLD:
+    #par['w_out0'] = initialize([par['n_hidden'], par['n_output']], par['connection_prob'])
+    #par['b_out0'] = np.zeros((1, par['n_output']), dtype=np.float32)
+    ## NEW:
+    par['w_out0'] = initialize([par['n_networks'], par['n_hidden'], par['n_output']], par['connection_prob'])
+    par['b_out0'] = np.zeros((par['n_networks'], 1, par['n_output']), dtype=np.float32)
 
     # for EI networks, masks will prevent self-connections, and inh to output connections
     par['w_rnn_mask'] = np.ones_like(par['w_rnn0'])
     par['w_out_mask'] = np.ones_like(par['w_out0'])
     par['w_in_mask'] = np.ones_like(par['w_in0'])
     if par['EI']:
-        par['w_rnn_mask'] = np.ones((par['n_hidden'], par['n_hidden']), dtype=np.float32) - np.eye(par['n_hidden'])
-        par['w_out_mask'][par['ind_inh'], :] = 0
+        ## OLD:
+        #par['w_rnn_mask'] = np.ones((par['n_hidden'], par['n_hidden']), dtype=np.float32) - np.eye(par['n_hidden'])
+        #par['w_out_mask'][par['ind_inh'], :] = 0
+        ## NEW:
+        par['w_rnn_mask'] = np.ones((par['n_networks'], par['n_hidden'], par['n_hidden']), dtype=np.float32) - np.eye(par['n_hidden'])
+        par['w_out_mask'][:, par['ind_inh'], :] = 0
 
     par['w_rnn0'] *= par['w_rnn_mask']
     par['w_out0'] *= par['w_out_mask']
@@ -289,7 +321,10 @@ def update_dependencies():
         target_ind = [range(0, par['n_hidden'],3), range(1, par['n_hidden'],3), range(2, par['n_hidden'],3)]
         for n in range(par['n_input']):
             u = int(n//(par['n_input']/3))
-            par['w_in_mask'][n, target_ind[u]] = 1
+            ## OLD:
+            #par['w_in_mask'][n, target_ind[u]] = 1
+            ## NEW:
+            par['w_in_mask'][:, n, target_ind[u]] = 1
         par['w_in0'] = par['w_in0']*par['w_in_mask']
 
     synaptic_configurations = {
@@ -304,27 +339,49 @@ def update_dependencies():
     }
 
     # initialize synaptic values
-    par['alpha_stf'] = np.ones((1, par['n_hidden']), dtype=np.float32)
-    par['alpha_std'] = np.ones((1, par['n_hidden']), dtype=np.float32)
-    par['U'] = np.ones((1, par['n_hidden']), dtype=np.float32)
-    par['syn_x_init'] = np.ones((par['batch_size'], par['n_hidden']), dtype=np.float32)
-    par['syn_u_init'] = 0.3 * np.ones((par['batch_size'], par['n_hidden']), dtype=np.float32)
-    par['dynamic_synapse'] = np.zeros((1, par['n_hidden']), dtype=np.float32)
+    ## OLD:
+    #par['alpha_stf'] = np.ones((1, par['n_hidden']), dtype=np.float32)
+    #par['alpha_std'] = np.ones((1, par['n_hidden']), dtype=np.float32)
+    #par['U'] = np.ones((1, par['n_hidden']), dtype=np.float32)
+    #par['syn_x_init'] = np.ones((par['batch_size'], par['n_hidden']), dtype=np.float32)
+    #par['syn_u_init'] = 0.3 * np.ones((par['batch_size'], par['n_hidden']), dtype=np.float32)
+    #par['dynamic_synapse'] = np.zeros((1, par['n_hidden']), dtype=np.float32)
+    ## NEW:
+    par['alpha_stf'] = np.ones((par['n_networks'], 1, par['n_hidden']), dtype=np.float32)
+    par['alpha_std'] = np.ones((par['n_networks'], 1, par['n_hidden']), dtype=np.float32)
+    par['U'] = np.ones((par['n_networks'], 1, par['n_hidden']), dtype=np.float32)
+    par['syn_x_init'] = np.ones((par['n_networks'], par['batch_size'], par['n_hidden']), dtype=np.float32)
+    par['syn_u_init'] = 0.3 * np.ones((par['n_networks'], par['batch_size'], par['n_hidden']), dtype=np.float32)
+    par['dynamic_synapse'] = np.zeros((par['n_networks'], 1, par['n_hidden']), dtype=np.float32)
 
     for i in range(par['n_hidden']):
         if synaptic_configurations[par['synapse_config']][i] == 'facilitating':
-            par['alpha_stf'][0,i] = par['dt']/par['tau_slow']
-            par['alpha_std'][0,i] = par['dt']/par['tau_fast']
-            par['U'][0,i] = 0.15
-            par['syn_u_init'][:, i] = par['U'][0,i]
-            par['dynamic_synapse'][0,i] = 1
+            ## OLD:
+            #par['alpha_stf'][0,i] = par['dt']/par['tau_slow']
+            #par['alpha_std'][0,i] = par['dt']/par['tau_fast']
+            #par['U'][0,i] = 0.15
+            #par['syn_u_init'][:, i] = par['U'][0,i]
+            #par['dynamic_synapse'][0,i] = 1
+            ## NEW:
+            par['alpha_stf'][:,0,i] = par['dt']/par['tau_slow']
+            par['alpha_std'][:,0,i] = par['dt']/par['tau_fast']
+            par['U'][:,0,i] = 0.15
+            par['syn_u_init'][:,:, i] = np.tile(par['U'][:,0,i][:,np.newaxis], (1, par['batch_size']))
+            par['dynamic_synapse'][:,0,i] = 1
 
         elif synaptic_configurations[par['synapse_config']][i] == 'depressing':
-            par['alpha_stf'][0,i] = par['dt']/par['tau_fast']
-            par['alpha_std'][0,i] = par['dt']/par['tau_slow']
-            par['U'][0,i] = 0.45
-            par['syn_u_init'][:, i] = par['U'][0,i]
-            par['dynamic_synapse'][0,i] = 1
+            ## OLD:
+            #par['alpha_stf'][0,i] = par['dt']/par['tau_fast']
+            #par['alpha_std'][0,i] = par['dt']/par['tau_slow']
+            #par['U'][0,i] = 0.45
+            #par['syn_u_init'][:, i] = par['U'][0,i]
+            #par['dynamic_synapse'][0,i] = 1
+            ## NEW:
+            par['alpha_stf'][:,0,i] = par['dt']/par['tau_fast']
+            par['alpha_std'][:,0,i] = par['dt']/par['tau_slow']
+            par['U'][:,0,i] = 0.45
+            par['syn_u_init'][:,:, i] = np.tile(par['U'][:,0,i][:,np.newaxis], (1, par['batch_size']))
+            par['dynamic_synapse'][:,0,i] = 1
 
 
 

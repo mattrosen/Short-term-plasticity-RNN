@@ -11,29 +11,43 @@ def try_model(gpu_id):
     except KeyboardInterrupt:
         quit('Quit by KeyboardInterrupt')
 
-try:
-    gpu_id = sys.argv[1]
-    print('Selecting GPU ', gpu_id)
-except:
-    gpu_id = None
+# Wrapped into main
+if __name__ == "__main__":
 
+    # Handle args
+    try:
+        gpu_id = sys.argv[1]
+        print('Selecting GPU ', gpu_id)
+    except:
+        gpu_id = None
 
-update_parameters({ 'simulation_reps'       : 0,
-                    'batch_train_size'      : 1024,
-                    'learning_rate'         : 0.02,
-                    'noise_rnn_sd'          : 0.5,
-                    'noise_in_sd'           : 0.1,
-                    'num_iterations'        : 2000,
-                    'spike_regularization'  : 'L2',
-                    'synaptic_config'       : 'full',
-                    'test_cost_multiplier'  : 2.,
-                    'balance_EI'            : True,
-                    'savedir'               : './savedir/'})
+    trainer_id = int(gpu_id)
+    n_networks = 10000
 
-task_list = ['DMS']
+    # Update parameters
+    update_parameters({ 'simulation_reps'           : 0,
+                        'batch_train_size'          : 2048,
+                        'learning_rate'             : 0.02,
+                        'noise_rnn_sd'              : 0.5,
+                        'noise_in_sd'               : 0.1,
+                        'num_iterations'            : 300,
+                        'spike_regularization'      : 'L1',
+                        'synaptic_config'           : 'full',
+                        'test_cost_multiplier'      : 2.,
+                        'balance_EI'                : True,
+                        'weight_cost'               : 1,
+                        'spike_cost'                : 1e-3,
+                        'fix_time'                  : 200,
+                        'sample_time'               : 200,
+                        'delay_time'                : 500,
+                        'test_time'                 : 200,
+                        'num_network_sets_per_gpu'  : n_networks // par['n_networks'],
+                        'savedir'                   : './savedir/'})
 
-for task in task_list:
-    for n in range(20):
-        save_fn = task + str(n) + '.pkl'
-        update_parameters({'trial_type': task, 'save_fn': save_fn})
+    task_list = ['DMS']
+
+    # Run models
+    for task in task_list:
+        #save_fn = task + '.pkl'
+        update_parameters({'trial_type': task})#, 'save_fn': save_fn})
         try_model(gpu_id)
