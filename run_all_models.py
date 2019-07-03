@@ -22,7 +22,7 @@ if __name__ == "__main__":
         gpu_id = None
 
     trainer_id = int(gpu_id)
-    n_networks = 10000
+    n_networks = 12500
 
     # Update parameters
     update_parameters({ 'simulation_reps'           : 0,
@@ -44,7 +44,9 @@ if __name__ == "__main__":
                         'num_network_sets_per_gpu'  : n_networks // par['n_networks'],
                         'savedir'                   : './savedir/'})
 
-    task_list = ['DMS']
+    task_list = ['DMRS45','DMRS90','DMRS90ccw','DMRS180','ABBA','ABCA','dualDMS',]
+    # For Oliver:
+    #task_list = ['DMS+DMRS','DMS+DMRS_early_cue', 'DMS+DMRS_full_cue', 'DMS+DMC','DMS+DMRS+DMC','location_DMS']
 
     # Run models
     for task in task_list:

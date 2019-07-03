@@ -11,6 +11,7 @@ import pickle
 import time
 from parameters import par, update_trial_params, update_dependencies
 import os, sys
+import glob
 
 # Ignore "use compiled version of TensorFlow" errors
 os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
@@ -186,6 +187,13 @@ def main(gpu_id = None):
     if not os.path.exists(f'savedir/{gpu_id}/'):
         os.makedirs(f'savedir/{gpu_id}/')
 
+    # Find the highest ID saved for this task; 
+    save_increment = 0
+    ids = glob.glob(f'savedir/{gpu_id}/{par["trial_type"]}*.pkl')
+    if len(ids) > 0:
+        nums = [int(i[i.find(par[trial_type]) + len(par[trial_type]):]) for i in ids]
+        save_increment = max(nums) + 1
+
     # enter "config=tf.ConfigProto(log_device_placement=True)" inside Session to check whether CPU/GPU in use
     with tf.Session(config=tf.ConfigProto()) as sess:
 
@@ -228,7 +236,8 @@ def main(gpu_id = None):
 
             # Save model and results
             weights = sess.run(model.var_dict)
-            save_results(model_performance, weights, save_fn=f'{str(gpu_id)}/{par["trial_type"]}{j}.pkl')
+            save_results(model_performance, weights, 
+                save_fn=f'{str(gpu_id)}/{par["trial_type"]}{j + save_increment}.pkl')
 
             # After each bunch: clear history, reset all weights, run again
             update_trial_params()

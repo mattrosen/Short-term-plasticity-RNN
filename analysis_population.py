@@ -28,14 +28,14 @@ def perform_clustering_analysis(X, y, to_plot=True):
     """ Perform clustering analysis; assume [n_nets x n_neur x n_neur]."""
 
     # Fit TSNE
-    tsne = TSNE(n_components=2).fit_transform(X)
+    tsne = TSNE(n_components=2, perplexity=500).fit_transform(X)
 
     # Plot if desired
     if to_plot:
         colors = sns.color_palette("husl", len(np.unique(y)))
         print(colors, type(colors), tsne.shape, y.shape, y.dtype)
         fig, ax = plt.subplots(1)
-        ax.scatter(tsne[:,0], tsne[:,1])
+        ax.scatter(tsne[:,0], tsne[:,1], c=y)
         fig.savefig("TSNE_plot.png", dpi=500)
 
     return
@@ -44,10 +44,10 @@ def perform_SVM_analysis(X, y):
     """ Perform SVM analysis; assume [n_nets x n_neur x n_neur]."""
 
     # Split train/test data
-    X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.2)
+    X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.5)
 
     # Train SVM
-    clf = svm.SVC(kernel='rbf', gamma='scale', class_weight='balanced', probability=True)
+    clf = svm.SVC(kernel='rbf', class_weight='balanced', probability=True)
     clf.fit(X_tr, y_tr)
 
     # Predict on test data, return accuracy
@@ -57,12 +57,12 @@ def perform_SVM_analysis(X, y):
 if __name__ == "__main__":
 
     # Define some params
-    N = 100  # number of networks total to load
+    N = 500  # number of networks total to load
     N_PER = 10 # number of networks of each type to load
     N_NEUR = 60
 
     # Load in dataset names
-    task_list = ['DMS']#, 'DMC', 'DMC_dual']
+    task_list = ['DMS', 'DMC']#, 'DMC_dual']
     fns = {}
     for task in task_list:
         fns[task] = glob.glob(f"./savedir/*/{task}*.pkl")
@@ -82,9 +82,10 @@ if __name__ == "__main__":
         all_data[i * N:(i + 1) * N, :] = np.reshape(nets[task], (N, -1))
         labels[i * N:(i + 1) * N] *= i
 
-
     # Conduct SVM analysis
     perform_clustering_analysis(all_data, labels)
-    perform_SVM_analysis(all_data, labels)
-
+    acc = perform_SVM_analysis(all_data, labels)
+    print(f"Accuracy: {acc}")
+    print(f"Mean weights (DMS): {np.mean(all_data[0:N, :].flatten())}")
+    print(f"Mean weights (DMC): {np.mean(all_data[N:, :].flatten())}")
 
