@@ -1,5 +1,5 @@
 import matplotlib
-matplotlib.use('Agg')
+#matplotlib.use('Agg')
 import matplotlib.pyplot as plt 
 import numpy as np 
 import glob
@@ -10,21 +10,26 @@ from sklearn import svm
 from sklearn.model_selection import train_test_split
 from sklearn.manifold import TSNE
 import seaborn as sns
+from parameters import *
+import model
 
 
 # Load + process single network file
-def load_single_network_file(filename):
+def load_single_network_file(filename, simple_version = True):
 
-    # load data
+    # Load data
     dat_dict = pickle.load(open(filename, 'rb'))
 
     # extract weight matrix, return
-    return dat_dict['weights']['w_rnn']
+    if simple_version:
+        return dat_dict['weights']['w_rnn']
+    else:
+        return dat_dict
 
 ################################################################################ 
 """                         Analysis: SVM/clustering                         """
 ################################################################################ 
-def perform_clustering_analysis(X, y, to_plot=True):
+def perform_clustering_analysis(X, y, to_plot=False):
     """ Perform clustering analysis; assume [n_nets x n_neur x n_neur]."""
 
     # Fit TSNE
@@ -53,19 +58,37 @@ def perform_SVM_analysis(X, y):
     # Predict on test data, return accuracy
     return clf.score(X_te, y_te)
 
+def perform_sparsity_analysis(X, orig_shape, to_plot=True):
+
+    # Knock out some percentage of weights (nearest to 0)
+    pcts = np.linspace(0.0, 0.1, 5)
+    for net_id in range(X.shape[0]):
+        sorted_inds = np.argsort(abs(X[net_id,:]))
+        for pct in pcts:
+            to_remove = int(pct * len(net))
+            sparsified = X[net_id, :]
+            sparsified[sorted_inds[:to_remove]] = 0
+            net = sparsified.reshape(orig_shape)
+
+
+    return
+
 ################################################################################ 
 if __name__ == "__main__":
 
     # Define some params
-    N = 500  # number of networks total to load
+    N = 10  # number of networks total to load
     N_PER = 10 # number of networks of each type to load
     N_NEUR = 60
 
     # Load in dataset names
-    task_list = ['DMS', 'DMC']#, 'DMC_dual']
+    task_list = ['DMS', 'DMRS180']#, 'DMC_dual']
     fns = {}
     for task in task_list:
-        fns[task] = glob.glob(f"./savedir/*/{task}*.pkl")
+        #fns[task] = glob.glob(f"./savedir/*/{task}*.pkl")
+        fns[task] = glob.glob(f"/Volumes/My Passport/Lots of RNNs 1/*/{task}*.pkl")
+
+    #print(fns)
 
     # Load N networks of each type
     nets = {}
@@ -88,4 +111,50 @@ if __name__ == "__main__":
     print(f"Accuracy: {acc}")
     print(f"Mean weights (DMS): {np.mean(all_data[0:N, :].flatten())}")
     print(f"Mean weights (DMC): {np.mean(all_data[N:, :].flatten())}")
+
+    # Sparsity analysis
+    for task in task_list:
+        choice_inds = np.random.choice(len(fns[task]), N // N_PER)
+        nets[task] = np.zeros((N, N_NEUR, N_NEUR))
+        for t, i in enumerate(choice_inds):
+            all_params = load_single_network_file(fns[task][i], False)
+            nets[task][t * N_PER:(t + 1) * N_PER, :, :] = all_params['weights']['w_rnn']
+
+            # update weights in par
+            #for key, val in all_params['weights'].items():
+            #    print(key, val.shape)
+            #    if key + "0" in par.keys():
+            #        par[key + "0"] = val
+
+            # update parameters in par
+            update_parameters(all_params['parameters'])
+            
+            for key, val in all_params['weights'].items():
+                print(key, val.shape)
+                if key + "0" in par.keys():
+                    par[key + "0"] = val
+
+            w_rnn = all_params['weights']['w_rnn']
+
+            # do the sparsification, one network at a time
+            pcts = np.linspace(0.3, 0.9, 5)
+            sorted_inds = np.array([np.argsort(abs(w_rnn[net_id,:,:]), None) for net_id in range(w_rnn.shape[0])])
+            for pct in pcts:
+                to_remove = int(pct * N_NEUR * N_NEUR)
+                for net_id in range(w_rnn.shape[0]):
+                    rows = sorted_inds[net_id, 0:to_remove] // N_NEUR
+                    cols = sorted_inds[net_id, 0:to_remove] % N_NEUR
+                    #print(w_rnn[net_id, rows, cols])
+                    #print(cols)
+                    w_rnn[net_id, rows, cols] = 0
+                
+                par['w_rnn0'] = w_rnn
+                par['num_iterations'] = 20
+                par['iters_between_outputs'] = 10
+                par['num_network_sets_per_gpu'] = 1
+
+                # try model
+                model.main(None)
+
+
 

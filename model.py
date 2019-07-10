@@ -9,7 +9,7 @@ import stimulus
 import analysis
 import pickle
 import time
-from parameters import par, update_trial_params, update_dependencies
+from parameters import par, update_trial_params, update_dependencies, update_parameters
 import os, sys
 import glob
 
@@ -191,7 +191,7 @@ def main(gpu_id = None):
     save_increment = 0
     ids = glob.glob(f'savedir/{gpu_id}/{par["trial_type"]}*.pkl')
     if len(ids) > 0:
-        nums = [int(i[i.find(par[trial_type]) + len(par[trial_type]):]) for i in ids]
+        nums = [int(i[i.find(par['trial_type']) + len(par['trial_type']):-4]) for i in ids]
         save_increment = max(nums) + 1
 
     # enter "config=tf.ConfigProto(log_device_placement=True)" inside Session to check whether CPU/GPU in use
@@ -210,7 +210,7 @@ def main(gpu_id = None):
             'weight_loss': [], 'iteration': []}
 
         t0 = time.time()
-        for j in range(par['num_network_sets_per_gpu']):
+        for j in range(save_increment, par['num_network_sets_per_gpu']):
 
             for i in range(par['num_iterations']):
 
@@ -237,16 +237,14 @@ def main(gpu_id = None):
             # Save model and results
             weights = sess.run(model.var_dict)
             save_results(model_performance, weights, 
-                save_fn=f'{str(gpu_id)}/{par["trial_type"]}{j + save_increment}.pkl')
+                save_fn=f'{str(gpu_id)}/{par["trial_type"]}{j}.pkl')
 
             # After each bunch: clear history, reset all weights, run again
             update_trial_params()
             update_dependencies()
             sess.run([model.reset_vars_ops, model.reset_opt])
 
-            
-        
-
+################################################################################
 
 def save_results(model_performance, weights, save_fn = None):
 
